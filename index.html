@@ -207,16 +207,32 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        let items = JSON.parse(localStorage.getItem('shoppingList')) || [];
+        const SUPABASE_URL = 'https://aeqgptphrbdkjuokqwoj.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlcWdwdHBocmJka2p1b2txd29qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxMTI2OTQsImV4cCI6MjA4MzY4ODY5NH0.ESRdgorZ8q0xIAhglH073fyPczFKhLGfqK0JyntdSos';
 
-        function saveItems() {
-            localStorage.setItem('shoppingList', JSON.stringify(items));
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let items = [];
+
+        async function loadItems() {
+            const { data, error } = await supabase
+                .from('shopping_items')
+                .select('*')
+                .order('created_at', { ascending: true });
+
+            if (error) {
+                console.error('데이터 로드 오류:', error);
+                return;
+            }
+
+            items = data || [];
+            renderList();
         }
 
         function renderList() {
             const container = document.getElementById('listContainer');
-            const emptyMessage = document.getElementById('emptyMessage');
             const stats = document.getElementById('stats');
 
             if (items.length === 0) {
@@ -229,11 +245,11 @@
             document.getElementById('totalCount').textContent = `총 ${items.length}개`;
             document.getElementById('checkedCount').textContent = `완료 ${items.filter(i => i.checked).length}개`;
 
-            container.innerHTML = items.map((item, index) => `
-                <div class="item ${item.checked ? 'checked' : ''}" data-index="${index}">
-                    <div class="checkbox" onclick="toggleItem(${index})"></div>
+            container.innerHTML = items.map((item) => `
+                <div class="item ${item.checked ? 'checked' : ''}" data-id="${item.id}">
+                    <div class="checkbox" onclick="toggleItem('${item.id}')"></div>
                     <span class="item-text">${escapeHtml(item.text)}</span>
-                    <button class="delete-btn" onclick="deleteItem(${index})">✕</button>
+                    <button class="delete-btn" onclick="deleteItem('${item.id}')">✕</button>
                 </div>
             `).join('');
         }
@@ -244,28 +260,60 @@
             return div.innerHTML;
         }
 
-        function addItem() {
+        async function addItem() {
             const input = document.getElementById('itemInput');
             const text = input.value.trim();
 
             if (text === '') return;
 
-            items.push({ text, checked: false });
-            saveItems();
+            const { data, error } = await supabase
+                .from('shopping_items')
+                .insert([{ text, checked: false }])
+                .select();
+
+            if (error) {
+                console.error('아이템 추가 오류:', error);
+                return;
+            }
+
+            items.push(data[0]);
             renderList();
             input.value = '';
             input.focus();
         }
 
-        function toggleItem(index) {
-            items[index].checked = !items[index].checked;
-            saveItems();
+        async function toggleItem(id) {
+            const item = items.find(i => i.id === id);
+            if (!item) return;
+
+            const newChecked = !item.checked;
+
+            const { error } = await supabase
+                .from('shopping_items')
+                .update({ checked: newChecked })
+                .eq('id', id);
+
+            if (error) {
+                console.error('아이템 업데이트 오류:', error);
+                return;
+            }
+
+            item.checked = newChecked;
             renderList();
         }
 
-        function deleteItem(index) {
-            items.splice(index, 1);
-            saveItems();
+        async function deleteItem(id) {
+            const { error } = await supabase
+                .from('shopping_items')
+                .delete()
+                .eq('id', id);
+
+            if (error) {
+                console.error('아이템 삭제 오류:', error);
+                return;
+            }
+
+            items = items.filter(i => i.id !== id);
             renderList();
         }
 
@@ -275,7 +323,7 @@
             }
         });
 
-        renderList();
+        loadItems();
     </script>
 </body>
 </html>
